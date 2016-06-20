@@ -21,11 +21,6 @@
         exit(EXIT_FAILURE);                     \
     } while (0)
 
-static _Bool get_value(FILE *fp, size_t offset, size_t count)
-{
-    return false;
-}
-
 static void usage(const char *execname)
 {
     printf("Usage: %s <index> [-c count] [-h]\n"
@@ -55,6 +50,22 @@ static void usage(const char *execname)
            "* THE USER IS RESPONSIBLE FOR WHERE THEY PASTE THE PASSWORD\n"
            "* AND FOR THE CONTENTS OF THE PASSWORD.\n",
            execname, DATA_FILE, DEFAULT_N_READ_BYTES, DATA_FILE);
+}
+
+/* Free this when done */
+static unsigned char *get_data(int fd, size_t offset, size_t count)
+{
+    unsigned char *data = malloc(count + 1);
+
+    if (!data)
+      ERR("Not enough memory to allocate for clipboard");
+    if (lseek(fd, offset, SEEK_SET) == -1)
+      ERR("Could not seek to offset %zu: %s", offset, strerror(errno));
+    if (read(fd, data, count) != count)
+      ERR("Error reading %zu bytes from entropy file\n", count);
+
+    data[count] = '\0';
+    return data;
 }
 
 static void generate_entropy_file(const char *data_file, size_t n_bytes)
@@ -106,6 +117,7 @@ static void generate_entropy_file(const char *data_file, size_t n_bytes)
     fclose(en);
 }
 
+/* Free this when done */
 static char *generate_data_path_name(void)
 {
     size_t len;
@@ -178,9 +190,10 @@ int main(int argc, char **argv)
       ERR("Requested %zu bytes but the file %s is only %zu bytes",
           n_bytes, data_path, file_info.st_size);
 
+    /* Get data */
     printf("Copying password to primary buffer.\n");
+    str = get_data(fd, code_index, n_bytes);
 
-    
     /* Create a display and get the root window */
     if (!(disp = XOpenDisplay(NULL)))
       ERR("Could not open display");

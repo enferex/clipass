@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
 #include <string.h>
 #include <pwd.h>
 #include <unistd.h>
@@ -13,6 +15,7 @@
 #include <X11/Xlib.h>
 
 #define DEFAULT_N_READ_BYTES 64
+#define DEFAULT_TIMEOUT_SECONDS 5
 #define DATA_FILE "~/.config/clipass/entropy"
 #define ENTROPY_SRC    "/dev/urandom"
 #define ERR(...)                                \
@@ -42,8 +45,8 @@ static void usage(const char *execname)
            "a password.\n"
            "CliPass reads data from the user's read-only file (%s),\n"
            "copies '-c' bytes of that data to the clipboard and then\n"
-           "the user has 5 seconds to paste that into the input field\n"
-           "of their choice.  After 5 seconds the clipboard is cleared.\n"
+           "the user has %d seconds to paste that into the input field\n"
+           "of their choice.  After %d seconds the clipboard is cleared.\n"
            "\n"
            "===== DISCLAIMER =====\n"
            "* THIS IS FREE SOFTWARE: NO WARRANTY OR GUARANTEE.\n"
@@ -51,7 +54,19 @@ static void usage(const char *execname)
            "* (Or use this to learn how the X clipboard works (selections)).\n"
            "* THE USER IS RESPONSIBLE FOR WHERE THEY PASTE THE PASSWORD\n"
            "* AND FOR THE CONTENTS OF THE PASSWORD.\n",
-           execname, DATA_FILE, DEFAULT_N_READ_BYTES, DATA_FILE);
+           execname, DATA_FILE, DEFAULT_N_READ_BYTES, DATA_FILE,
+           DEFAULT_TIMEOUT_SECONDS, DEFAULT_TIMEOUT_SECONDS);
+}
+
+/* Timeout thread */
+void *timeout_thread(void *n_secs_ptr)
+{
+    const int n_seconds = *(int *)n_secs_ptr;
+    /* Seconds to milli seconds */
+    poll(NULL, 0, n_seconds * 1000);
+    printf("Time out has occured. Have a nice day!\n");
+    exit(EXIT_SUCCESS);
+    return 0;
 }
 
 /* Free this when done */
@@ -140,9 +155,10 @@ static char *generate_data_path_name(void)
 
 int main(int argc, char **argv)
 {
-    int i, fd, opt;
+    int i, fd, opt, timeout_seconds;
     Display *disp;
     Window win;
+    pthread_t thread;
     size_t n_bytes;
     ssize_t code_index;
     struct stat file_info;
@@ -205,8 +221,10 @@ int main(int argc, char **argv)
     XSetSelectionOwner(disp, XA_PRIMARY, win, CurrentTime);
     
     /* Loop and wait for events from applications that want to read from the primary
-     * selection or timeout and exit.
+     * selection or timeout and exit; Set a timeout.
      */
+    timeout_seconds = DEFAULT_TIMEOUT_SECONDS;
+    pthread_create(&thread, NULL, timeout_thread, &timeout_seconds);
     for ( ;; ) {
         XEvent event;
         XNextEvent(disp, &event);

@@ -1,7 +1,7 @@
 APP=clipass
 CC=gcc
 CFLAGS=-O0 -g3 -Wall -pedantic -std=c11 -D_XOPEN_SOURCE
-LDFLAGS=-lX11
+LDFLAGS=-lX11 -lpthread
 
 $(APP): main.c
 	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@

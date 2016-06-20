@@ -126,9 +126,10 @@ static char *generate_data_path_name(void)
 
 int main(int argc, char **argv)
 {
-    int i, fd, opt, n_bytes;
+    int i, fd, opt;
     Display *disp;
     Window win;
+    size_t n_bytes;
     ssize_t code_index;
     struct stat file_info;
     _Bool do_gen;
@@ -173,8 +174,12 @@ int main(int argc, char **argv)
       ERR("Entropy file must be user-read-only (see -h)");
 
     /* Check that the index and length are within range of the file */
+    if (n_bytes > file_info.st_size)
+      ERR("Requested %zu bytes but the file %s is only %zu bytes",
+          n_bytes, data_path, file_info.st_size);
 
     printf("Copying password to primary buffer.\n");
+
     
     /* Create a display and get the root window */
     if (!(disp = XOpenDisplay(NULL)))

@@ -98,14 +98,15 @@ static void generate_entropy_file(size_t n_bytes)
         putc('.', stdout);
         fflush(NULL);
     }
-    putc('\n', stdout);
-    printf("%zu bytes of (printable) entropy saved to: %s\n", i, DATA_FILE);
+    printf("\n%zu bytes of (printable) entropy saved to: %s\n", i, DATA_FILE);
 
+    /* chmod 0400 */
     printf("Marking file as read-only by the user: 0400\n");
     if (chmod(DATA_FILE, S_IRUSR) == -1) {
         fprintf(stderr, "Error setting permission to %s\n", DATA_FILE);
         exit(EXIT_FAILURE);
     }
+
     fclose(fp);
     fclose(en);
 }

@@ -5,13 +5,14 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <pwd.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <X11/X.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 
-#define DEFAULT_N_READ_BYTES 1024
+#define DEFAULT_N_READ_BYTES 64
 #define DATA_FILE "~/.config/clipass/entropy"
 #define ENTROPY_SRC    "/dev/urandom"
 #define ERR(...)                                \
@@ -110,7 +111,7 @@ static void generate_entropy_file(const char *data_file, size_t n_bytes)
 
     /* chmod 0400 */
     printf("Marking file as read-only by the user: 0400\n");
-    if (chmod(DATA_FILE, S_IRUSR) == -1)
+    if (chmod(data_file, S_IRUSR) == -1)
       ERR("Setting permission to %s", data_file);
 
     fclose(fp);
@@ -122,17 +123,17 @@ static char *generate_data_path_name(void)
 {
     size_t len;
     char *path;
-    const char *user = getlogin();
+    struct passwd *pw = getpwuid(getuid());
+  
+    if (!pw || !pw->pw_name)
+      ERR("User name could not be found: %s", strerror(errno));
 
-    if (!user)
-      ERR("User name could not be found");
-
-    len = strlen("/home/") + strlen(user) + strlen(DATA_FILE) + 1;
+    len = strlen("/home/") + strlen(pw->pw_name) + strlen(DATA_FILE) + 1;
     if (!(path = malloc(len)))
       ERR("Not enough memory to allocate a pathname");
 
     /* +1 to skip past the '~' */
-    snprintf(path, len, "/home/%s/%s", user, DATA_FILE+1);
+    snprintf(path, len, "/home/%s%s", pw->pw_name, DATA_FILE+1);
     return path;
 }
 
@@ -179,7 +180,7 @@ int main(int argc, char **argv)
 
     /* Check entropy file existence and readability */
     if ((fd = open(data_path, O_RDONLY)) == -1)
-      ERR("Opening entropy file: %s (see -h)\n", data_path);
+      ERR("Opening entropy file: %s: %s (see -h)\n",data_path, strerror(errno));
     if (fstat(fd, &file_info) != 0)
       ERR("Obtaining stats on entropy file: %s (see -h)", data_path);
     if (file_info.st_mode == S_IRUSR)

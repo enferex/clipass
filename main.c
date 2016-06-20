@@ -31,17 +31,18 @@ static void usage(const char *execname)
            "       -g:       Generate an ASCII entropy file (-c bytes long)\n"
            "\n"
            "CliPass is a simple utility that can be used to\n"
-           "conviently generate large passwords that do not\n"
+           "conveniently generate large passwords that do not\n"
            "have to be remembered by the user.\n"
            "\nIn general passwords are a weak form of protection, but until\n"
            "the day where there are better alternatives, typically the\n"
            "larger the password the better, and that is the motivating idea\n"
            "behind this tool.\n"
            "\n"
-           "User's don't want to have to remember or manually enter a password.\n"
+           "User's don't want to have to remember or manually enter "
+           "a password.\n"
            "CliPass reads data from the user's read-only file (%s),\n"
            "copies '-c' bytes of that data to the clipboard and then\n"
-           "the user has 5 seconds to paste that into theinput field\n"
+           "the user has 5 seconds to paste that into the input field\n"
            "of their choice.  After 5 seconds the clipboard is cleared.\n"
            "\n"
            "===== DISCLAIMER =====\n"
@@ -219,7 +220,7 @@ int main(int argc, char **argv)
             sel.property = event.xselectionrequest.property;
             sel.time = event.xselectionrequest.time;
 
-            /* Update window property, apparantly this is how
+            /* Update window property, apparently this is how
              * selection data is passed.
              */
             XChangeProperty(event.xselectionrequest.display,

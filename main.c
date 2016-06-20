@@ -12,9 +12,14 @@
 #include <X11/Xlib.h>
 
 #define DEFAULT_N_READ_BYTES 1024
-#define DATA_FILE_PATH "/home/enferex/.config/clipass/"
-#define DATA_FILE      DATA_FILE_PATH  "entropy"
+#define DATA_FILE "~/.config/clipass/entropy"
 #define ENTROPY_SRC    "/dev/urandom"
+#define ERR(...)                                \
+    do {                                        \
+        fprintf(stderr, "Error: " __VA_ARGS__); \
+        fputc('\n', stderr);                    \
+        exit(EXIT_FAILURE);                     \
+    } while (0)
 
 static _Bool get_value(FILE *fp, size_t offset, size_t count)
 {
@@ -52,23 +57,19 @@ static void usage(const char *execname)
            execname, DATA_FILE, DEFAULT_N_READ_BYTES, DATA_FILE);
 }
 
-static void generate_entropy_file(size_t n_bytes)
+static void generate_entropy_file(const char *data_file, size_t n_bytes)
 {
     size_t i;
     FILE *en, *fp;
    
-    if (!(fp = fopen(DATA_FILE, "w"))) {
-        fprintf(stderr, "Could not create entropy file: %s\n"
-                "Check that this path exists: %s\n",
-                strerror(errno), DATA_FILE_PATH);
-        exit(EXIT_FAILURE);
-    }
+    if (!(fp = fopen(data_file, "w")))
+      ERR("Could not create entropy file: %s\n"
+          "Check that this path exists: %s",
+          strerror(errno), data_file);
 
     /* Open entropy source and read in data */
-    if (!(en = fopen(ENTROPY_SRC, "r"))) {
-        fprintf(stderr, "Could not open entropy source: %s\n", ENTROPY_SRC);
-        exit(EXIT_FAILURE);
-    }
+    if (!(en = fopen(ENTROPY_SRC, "r")))
+        ERR("Could not open entropy source: %s", ENTROPY_SRC);
 
     /* Read in data (one byte at a time, slower than a block) but we can
      * constantly churn the pool. I don't know what is more pseudorandom,
@@ -79,10 +80,8 @@ static void generate_entropy_file(size_t n_bytes)
     printf("Obtaining entropy: ");
     for (i=0; i<n_bytes; ++i) {
         int c = fgetc(en);
-        if (c == -1) {
-            fprintf(stderr, "Error reading %zu bytes of entropy.\n", n_bytes);
-            exit(EXIT_FAILURE);
-        }
+        if (c == -1)
+          ERR("Reading %zu bytes of entropy.", n_bytes);
 
         /* Ensure the data is printable, since I think most passwords assume
          * that.
@@ -90,25 +89,39 @@ static void generate_entropy_file(size_t n_bytes)
         c = (c % (126-32)) + 32;
     
         /* Save data */
-        if (fputc(c, fp) == -1) {
-            fprintf(stderr, "Error writing %zu bytes of entropy.\n", n_bytes);
-            exit(EXIT_FAILURE);
-        }
+        if (fputc(c, fp) == -1)
+          ERR("Writing %zu bytes of entropy.", n_bytes);
 
         putc('.', stdout);
         fflush(NULL);
     }
-    printf("\n%zu bytes of (printable) entropy saved to: %s\n", i, DATA_FILE);
+    printf("\n%zu bytes of (printable) entropy saved to: %s\n", i, data_file);
 
     /* chmod 0400 */
     printf("Marking file as read-only by the user: 0400\n");
-    if (chmod(DATA_FILE, S_IRUSR) == -1) {
-        fprintf(stderr, "Error setting permission to %s\n", DATA_FILE);
-        exit(EXIT_FAILURE);
-    }
+    if (chmod(DATA_FILE, S_IRUSR) == -1)
+      ERR("Setting permission to %s", data_file);
 
     fclose(fp);
     fclose(en);
+}
+
+static char *generate_data_path_name(void)
+{
+    size_t len;
+    char *path;
+    const char *user = getlogin();
+
+    if (!user)
+      ERR("User name could not be found");
+
+    len = strlen("/home/") + strlen(user) + strlen(DATA_FILE) + 1;
+    if (!(path = malloc(len)))
+      ERR("Not enough memory to allocate a pathname");
+
+    /* +1 to skip past the '~' */
+    snprintf(path, len, "/home/%s/%s", user, DATA_FILE+1);
+    return path;
 }
 
 int main(int argc, char **argv)
@@ -119,6 +132,7 @@ int main(int argc, char **argv)
     ssize_t code_index;
     struct stat file_info;
     _Bool do_gen;
+    char *data_path;
     const unsigned char *str = NULL;
 
     /* Args */
@@ -136,47 +150,35 @@ int main(int argc, char **argv)
     /* Argument describing the index into .data file */
     code_index = -1;
     for (i=optind; i<argc; ++i) {
-        if (code_index != -1) {
-            fprintf(stderr,
-                    "Error: multiple <index> arguments passed (see -h)\n");
-            exit(EXIT_FAILURE);
-        }
+        if (code_index != -1)
+          ERR("Multiple <index> arguments passed (see -h)");
         code_index = strtoll(argv[i], NULL, 10);
     }
-    if (code_index < 0 && !do_gen) {
-        fprintf(stderr, "An index must be specified (see help: -h)\n");
-        exit(EXIT_FAILURE);
-    }
+    if (code_index < 0 && !do_gen)
+      ERR("An index must be specified (see help: -h)");
+
+    /* Create the actual data path (expand ~ to the home directory) */
+    data_path = generate_data_path_name();
 
     /* Generate a new entropy file */
     if (do_gen)
-      generate_entropy_file(n_bytes);
+      generate_entropy_file(data_path, n_bytes);
 
     /* Check entropy file existence and readability */
-    if ((fd = open(DATA_FILE, O_RDONLY)) == -1) {
-        fprintf(stderr, "Error opening entropy file: %s (see -h)\n", DATA_FILE);
-        exit(EXIT_FAILURE);
-    }
-    if (fstat(fd, &file_info) != 0) {
-        fprintf(stderr, "Error obtainit stats on entropy file: %s (see -h)\n",
-                DATA_FILE);
-        exit(EXIT_FAILURE);
-    }
-    if (file_info.st_mode == S_IRUSR) {
-        fprintf(stderr, "Error: Entropy file must be "
-                "user-read-only (see -h)\n");
-        exit(EXIT_FAILURE);
-    }
+    if ((fd = open(data_path, O_RDONLY)) == -1)
+      ERR("Opening entropy file: %s (see -h)\n", data_path);
+    if (fstat(fd, &file_info) != 0)
+      ERR("Obtaining stats on entropy file: %s (see -h)", data_path);
+    if (file_info.st_mode == S_IRUSR)
+      ERR("Entropy file must be user-read-only (see -h)");
 
     /* Check that the index and length are within range of the file */
 
     printf("Copying password to primary buffer.\n");
     
     /* Create a display and get the root window */
-    if (!(disp = XOpenDisplay(NULL))) {
-        fprintf(stderr, "Could not open display\n");
-        exit(EXIT_FAILURE);
-    }
+    if (!(disp = XOpenDisplay(NULL)))
+      ERR("Could not open display");
     win = XDefaultRootWindow(disp);
 
     /* Claim we own the primary selection */
